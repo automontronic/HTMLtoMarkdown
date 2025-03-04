@@ -1,47 +1,101 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import ReactQuill from 'react-quill';
 import 'react-quill/dist/quill.snow.css';
 import TurndownService from 'turndown';
 import { marked } from 'marked';
 
 function HtmlToMarkdownConverter() {
-  const [html, setHtml] = useState('<p>Hello, world!</p>');
+  const initialHtml = `
+    <h1>Heading 1</h1>
+    <h2>Heading 2</h2>
+    <h3>Heading 3</h3>
+    <h4>Heading 4</h4>
+    <h5>Heading 5</h5>
+    <h6>Heading 6</h6>
+    <p>This is a paragraph with <strong>bold</strong> and <em>italic</em> text.</p>
+    <ul>
+      <li>List item one</li>
+      <li>List item two</li>
+    </ul>
+    <ol>
+      <li>First ordered item</li>
+      <li>First ordered item</li>
+    </ol>
+    <a href="https://example.com">Link to example.com</a>
+
+    <pre><code class="language-javascript">console.log("Hello, world!");</code></pre>
+    <hr />
+  `;
+
+  const [html, setHtml] = useState(initialHtml);
   const [markdown, setMarkdown] = useState('');
-  const [activeTab, setActiveTab] = useState('markdown');
+  const [activeTab, setActiveTab] = useState('preview');
   const [previewHtml, setPreviewHtml] = useState('');
+  const previewRef = useRef<HTMLIFrameElement>(null);
 
   const convertHtmlToMarkdown = useCallback(() => {
-    const turndownService = new TurndownService();
-    setMarkdown(turndownService.turndown(html));
+    const turndownService = new TurndownService({
+      headingStyle: 'atx',
+      codeBlockStyle: 'fenced'
+    });
+
+    turndownService.addRule('list-item', {
+      filter: 'li',
+      replacement: (content, node) => {
+        return '  * ' + content + '\n';
+      }
+    });
+
+    turndownService.addRule('blockquote', {
+      filter: 'blockquote',
+      replacement: function (content) {
+        return '> ' + content.replace(/\n+/g, '\n> ');
+      }
+    });
+
+    const newMarkdown = turndownService.turndown(html);
+    setMarkdown(newMarkdown);
+    setActiveTab('markdown');
   }, [html]);
 
   const convertMarkdownToHtml = useCallback(() => {
-    setPreviewHtml(marked(markdown));
+    const htmlContent = marked(markdown);
+    setPreviewHtml(htmlContent);
+  
   }, [markdown]);
 
   const handleTabClick = (tab) => {
     setActiveTab(tab);
     if (tab === 'preview') {
-      convertMarkdownToHtml(); // Convert Markdown to HTML when clicking Preview
+      convertMarkdownToHtml();
     }
   };
 
-  // Quill modules configuration
+  useEffect(() => {
+    if (activeTab === 'preview' && previewRef.current) {
+      const iframe = previewRef.current;
+      const iframeDocument = iframe.contentDocument || iframe.contentWindow?.document;
+      if (iframeDocument) {
+        iframeDocument.body.innerHTML = previewHtml;
+      }
+    }
+  }, [previewHtml, activeTab]);
+
   const modules = {
     toolbar: [
-      ['bold', 'italic', 'underline', 'strike'],        
+      ['bold', 'italic', 'underline', 'strike'],
       ['blockquote', 'code-block'],
       [{ 'header': 1 }, { 'header': 2 }],
       [{ 'list': 'ordered' }, { 'list': 'bullet' }],
-      [{ 'script': 'sub' }, { 'script': 'super' }],      
-      [{ 'indent': '-1' }, { 'indent': '+1' }],         
-      [{ 'direction': 'rtl' }],                         
-      [{ 'size': ['small', false, 'large', 'huge'] }],  
+      [{ 'script': 'sub' }, { 'script': 'super' }],
+      [{ 'indent': '-1' }, { 'indent': '+1' }],
+      [{ 'direction': 'rtl' }],
+      [{ 'size': ['small', false, 'large', 'huge'] }],
       [{ 'header': [1, 2, 3, 4, 5, 6, false] }],
-      [{ 'color': [] }, { 'background': [] }],         
+      [{ 'color': [] }, { 'background': [] }],
       [{ 'font': [] }],
       [{ 'align': [] }],
-      ['clean']                                         
+      ['clean']
     ],
   };
 
@@ -50,6 +104,7 @@ function HtmlToMarkdownConverter() {
     'blockquote', 'code-block',
     'header',
     'list', 'bullet',
+    'script',
     'script',
     'indent',
     'direction',
@@ -65,16 +120,15 @@ function HtmlToMarkdownConverter() {
   return (
     <div className="flex flex-col">
       <h1 className="mb-4 text-center text-4xl font-bold font-mono">
-          HTML to Markdown Convertor
+        HTML to Markdown Convertor
       </h1>
-      {/* Rich Text Editor */}
+
       <div className="mb-4">
         <label htmlFor="htmlInput" className="block text-gray-700 text-sm font-bold mb-2 font-mono">
           HTML Editor
         </label>
         <ReactQuill
           id="htmlInput"
-          
           value={html}
           onChange={setHtml}
           modules={modules}
@@ -82,10 +136,9 @@ function HtmlToMarkdownConverter() {
         />
       </div>
 
-      {/* Convert Button */}
       <div className="mb-4">
         <button
-          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline  font-mono"
+          className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline font-mono"
           type="button"
           onClick={convertHtmlToMarkdown}
         >
@@ -93,7 +146,6 @@ function HtmlToMarkdownConverter() {
         </button>
       </div>
 
-      {/* Tabs */}
       <div className="mb-4 border-b border-gray-200">
         <ul className="flex flex-wrap -mb-px text-sm font-medium text-center">
           <li className="mr-2">
@@ -115,7 +167,6 @@ function HtmlToMarkdownConverter() {
         </ul>
       </div>
 
-      {/* Markdown Preview */}
       <div>
         {activeTab === 'markdown' && (
           <div className="shadow overflow-hidden border border-gray-200 sm:rounded-lg">
@@ -150,7 +201,11 @@ function HtmlToMarkdownConverter() {
               <tbody className="bg-white divide-y divide-gray-200">
                 <tr>
                   <td className="px-6 py-4 whitespace-pre-wrap text-sm text-gray-500">
-                    <div dangerouslySetInnerHTML={{ __html: previewHtml }} />
+                    <iframe
+                      ref={previewRef}
+                      title="HTML Preview"
+                      style={{ width: '100%', height: '300px', border: 'none' }}
+                    />
                   </td>
                 </tr>
               </tbody>
